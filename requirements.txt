@@ -1,0 +1,9 @@
+# requirements.txt
+haystack-ai>=2.0.0
+faiss-cpu
+sentence-transformers
+fastapi
+uvicorn[standard]
+python-dotenv
+pandas
+orjson
