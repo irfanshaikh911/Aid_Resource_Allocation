@@ -9,7 +9,7 @@ const InventoryCard: React.FC<Props> = ({ item }) => {
   const percentage = (item.current / item.total) * 100;
 
   return (
-    <div className="flex-1 min-w-[200px] bg-white rounded-xl p-4 border border-gray-200 hover:shadow-lg transition-shadow">
+    <div className="h-full bg-white rounded-xl p-4 border border-gray-200 hover:shadow-lg transition-shadow">
       <div className="flex items-center justify-between mb-3">
         <div
           className={`w-12 h-12 ${item.bgColor} rounded-lg flex items-center justify-center`}

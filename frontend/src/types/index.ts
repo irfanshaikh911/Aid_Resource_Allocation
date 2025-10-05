@@ -1,15 +1,17 @@
+import { ReactNode } from 'react';
+
 // Inventory items
 export interface InventoryItem {
   id: string;
   name: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   current: number;
   total: number;
   color: string;
   bgColor: string;
 }
 
-// Allocation recommendation type (renamed to avoid conflicts)
+// Allocation recommendation type
 export interface AllocationRecommendationType {
   id: string;
   location: string;
@@ -35,6 +37,15 @@ export interface DetectionData {
 // Timeline events
 export interface TimelineEvent {
   id: string;
-  time: string; // e.g. "10:30 AM"
+  time: string;
   description: string;
+}
+
+// Drone data
+export interface DroneData {
+  Cluster_ID: string;
+  No_of_People: number;
+  Latitude: number;
+  Longitude: number;
+  Distance_from_Inventory_km: number;
 }
