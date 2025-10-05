@@ -11,12 +11,12 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 # Logging setup
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger(__name__)
 
 # Hugging Face API config
 API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
-HEADERS = {"Authorization": "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"}
+HEADERS = {"Authorization": "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"}
 
 @dataclass
 class InventoryItem:
@@ -27,25 +27,28 @@ class InventoryItem:
     priority: Optional[int] = 1
 
 class DisasterReliefRAG:
-    def __init__(self, embedder_model: str = "all-MiniLM-L6-v2", index_path: str = "inventory.index", inventory_path: str = "inventory.pkl"):
+    def __init__(self, embedder_model: str = "sentence-transformers/all-MiniLM-L6-v2", index_path: str = "inventory.index", inventory_path: str = "inventory.pkl"):
         self.embedder_model = embedder_model
         self.index_path = index_path
         self.inventory_path = inventory_path
 
-        # Initial inventory
+        # Initial inventory with higher quantities for testing
         self.inventory = [
-            {"id": 1, "item": "Medical Kit", "quantity": 20, "category": "medical", "priority": 1},
-            {"id": 2, "item": "Emergency Food Pack", "quantity": 50, "category": "food", "priority": 2},
-            {"id": 3, "item": "Water Bottles", "quantity": 100, "category": "water", "priority": 1},
-            {"id": 4, "item": "Rescue Tubes", "quantity": 15, "category": "rescue", "priority": 2},
-            {"id": 5, "item": "Blankets", "quantity": 30, "category": "shelter", "priority": 2},
-            {"id": 6, "item": "First Aid Bandages", "quantity": 200, "category": "medical", "priority": 1},
-            {"id": 7, "item": "Flashlights", "quantity": 25, "category": "equipment", "priority": 3},
-            {"id": 8, "item": "Batteries", "quantity": 100, "category": "equipment", "priority": 3},
-            {"id": 9, "item": "Tents", "quantity": 10, "category": "shelter", "priority": 2},
-            {"id": 10, "item": "Antibiotics", "quantity": 50, "category": "medical", "priority": 1},
+            {"id": 1, "item": "Medical Kit", "quantity": 50, "category": "medical", "priority": 1},
+            {"id": 2, "item": "Emergency Food Pack", "quantity": 100, "category": "food", "priority": 2},
+            {"id": 3, "item": "Water Bottles", "quantity": 300, "category": "water", "priority": 1},
+            {"id": 4, "item": "Rescue Tubes", "quantity": 30, "category": "rescue", "priority": 2},
+            {"id": 5, "item": "Blankets", "quantity": 80, "category": "shelter", "priority": 2},
+            {"id": 6, "item": "First Aid Bandages", "quantity": 500, "category": "medical", "priority": 1},
+            {"id": 7, "item": "Flashlights", "quantity": 50, "category": "equipment", "priority": 3},
+            {"id": 8, "item": "Batteries", "quantity": 200, "category": "equipment", "priority": 3},
+            {"id": 9, "item": "Tents", "quantity": 25, "category": "shelter", "priority": 2},
+            {"id": 10, "item": "Antibiotics", "quantity": 150, "category": "medical", "priority": 1},
         ]
 
+        # Track initial inventory for comparison
+        self.initial_inventory = {item["item"]: item["quantity"] for item in self.inventory}
+        
         self._initialize_embedder()
         self._build_index()
 
@@ -74,7 +77,7 @@ class DisasterReliefRAG:
 
     def _extract_people_count(self, query: str) -> int:
         """Extract number of people from the query"""
-        numbers = re.findall(r'\b(\d+)\s*(?:people|person|individuals|victims|casualties)', query.lower())
+        numbers = re.findall(r'\b(\d+)\s*(?:people|person|individuals|victims|casualties|injured|survivors)', query.lower())
         if numbers:
             return int(numbers[0])
         
@@ -123,13 +126,22 @@ class DisasterReliefRAG:
             
             if category in per_person_needs and item_name in per_person_needs[category]:
                 base_requirement = per_person_needs[category][item_name] * people_count
+                
                 # Adjust based on query context
-                if 'injuries' in query.lower() and category == 'medical':
-                    base_requirement *= 1.5  # Increase medical supplies for injuries
-                elif 'dehydration' in query.lower() and category == 'water':
+                if 'injuries' in query.lower() or 'injured' in query.lower():
+                    if category == 'medical':
+                        base_requirement *= 1.5  # Increase medical supplies for injuries
+                
+                if 'dehydration' in query.lower() and category == 'water':
                     base_requirement *= 1.5  # Increase water for dehydration
-                elif 'flood' in query.lower() and category in ['shelter', 'water']:
-                    base_requirement *= 1.3  # Increase shelter and water for floods
+                
+                if 'flood' in query.lower():
+                    if category in ['shelter', 'water']:
+                        base_requirement *= 1.3  # Increase shelter and water for floods
+                
+                if 'earthquake' in query.lower():
+                    if category == 'medical':
+                        base_requirement *= 1.5  # More medical supplies for earthquake injuries
                 
                 requirements[item_name] = max(1, int(base_requirement))
         
@@ -169,8 +181,25 @@ class DisasterReliefRAG:
             raw_text = str(raw)
 
         structured = self._parse_llm_response(raw_text, prompt)
+        
+        # If LLM doesn't provide recommendations, use estimated requirements
+        if not structured:
+            structured = self._create_fallback_recommendations(estimated_requirements)
+        
         validated = self._validate_recommendations(structured)
         return validated, retrieved_items, estimated_requirements
+
+    def _create_fallback_recommendations(self, estimated_requirements: Dict) -> Dict:
+        """Create recommendations based on estimated requirements if LLM fails"""
+        recommendations = {}
+        for item_name, required_qty in estimated_requirements.items():
+            # Find the item in inventory
+            for item in self.inventory:
+                if item["item"] == item_name:
+                    # Recommend minimum of required and available
+                    recommendations[item_name] = min(required_qty, item["quantity"])
+                    break
+        return recommendations
 
     def _create_prompt(self, query: str, context_lines: List[str], estimated_requirements: Dict) -> str:
         context = "\n".join(context_lines) or "No items available"
@@ -195,8 +224,9 @@ INSTRUCTIONS:
 1. Recommend ONLY from available inventory items listed above.
 2. Use exact item names from the inventory.
 3. Consider estimated needs but don't exceed available stock.
-4. Priorities: Medical > Water > Food > Shelter > Equipment.
-5. Return ONLY a valid JSON object with item names as keys and quantities as values.
+4. Allocate the minimum of estimated need and available stock.
+5. Priorities: Medical > Water > Food > Shelter > Equipment.
+6. Return ONLY a valid JSON object with item names as keys and quantities as values.
 
 Example format: {{"Medical Kit": 5, "Water Bottles": 30}}
 
@@ -236,7 +266,7 @@ RECOMMENDATION:"""
             # Find item with exact or fuzzy match
             item = self._find_inventory_item(name)
             if item:
-                # Ensure quantity is reasonable
+                # Ensure quantity is reasonable and available
                 requested_qty = min(int(qty), item["quantity"])
                 if requested_qty > 0:
                     validated[item["item"]] = requested_qty
@@ -272,17 +302,21 @@ RECOMMENDATION:"""
             
             if inventory_item:
                 available_qty = inventory_item["quantity"]
+                initial_qty = self.initial_inventory.get(item_name, 0)
+                
                 if available_qty >= requested_qty:
                     # Successful allocation
                     inventory_item["quantity"] -= requested_qty
                     successfully_allocated[item_name] = requested_qty
-                    logs.append(f"✅ Allocated {requested_qty} {item_name} (Remaining: {inventory_item['quantity']})")
+                    logs.append(f"✅ Allocated {requested_qty} {item_name}")
+                    logs.append(f"   Stock: {available_qty} → {inventory_item['quantity']} (Used: {initial_qty - inventory_item['quantity']} total)")
                 else:
                     # Partial allocation
                     if available_qty > 0:
                         inventory_item["quantity"] = 0
                         successfully_allocated[item_name] = available_qty
-                        logs.append(f"⚠️ Partially allocated {available_qty} {item_name} (Requested: {requested_qty}, Insufficient stock)")
+                        logs.append(f"⚠️ Partially allocated {available_qty} {item_name} (Requested: {requested_qty})")
+                        logs.append(f"   Stock: {available_qty} → 0 (Exhausted)")
                     else:
                         logs.append(f"❌ Cannot allocate {item_name} (Out of stock)")
             else:
@@ -292,35 +326,59 @@ RECOMMENDATION:"""
         self._save_index()
         
         if successfully_allocated:
-            logs.append(f"\n📊 Total items successfully allocated: {sum(successfully_allocated.values())}")
+            logs.append(f"\n📊 Allocation Summary:")
+            logs.append(f"   Items allocated: {len(successfully_allocated)}")
+            logs.append(f"   Total units: {sum(successfully_allocated.values())}")
         
         return logs
 
-    def display_inventory(self):
+    def display_inventory(self, show_usage: bool = False):
         print("\n📊 Current Inventory Status:")
+        print("-" * 60)
+        
         total_items = 0
+        total_used = 0
         by_category = {}
         
         for item in self.inventory:
-            print(f"- {item['item']}: {item['quantity']} units (Category: {item.get('category', 'N/A')}, Priority: {item.get('priority', 'N/A')})")
-            total_items += item['quantity']
+            current_qty = item['quantity']
+            initial_qty = self.initial_inventory.get(item['item'], 0)
+            used_qty = initial_qty - current_qty
+            total_used += used_qty
+            
+            status = "✅" if current_qty > 10 else ("⚠️" if current_qty > 0 else "❌")
+            
+            if show_usage and used_qty > 0:
+                print(f"{status} {item['item']}: {current_qty}/{initial_qty} units (Used: {used_qty})")
+            else:
+                print(f"{status} {item['item']}: {current_qty} units (Category: {item.get('category', 'N/A')})")
+            
+            total_items += current_qty
             
             category = item.get('category', 'Other')
             if category not in by_category:
                 by_category[category] = 0
-            by_category[category] += item['quantity']
+            by_category[category] += current_qty
         
-        print(f"\n📈 Summary: {total_items} total items across {len(by_category)} categories")
-        for cat, count in by_category.items():
-            print(f"  - {cat.title()}: {count} items")
+        print("-" * 60)
+        print(f"📈 Summary:")
+        print(f"   Total remaining: {total_items} units")
+        if show_usage:
+            print(f"   Total allocated: {total_used} units")
+        print(f"   Categories: {len(by_category)}")
+        
+        for cat, count in sorted(by_category.items()):
+            percentage = (count / total_items * 100) if total_items > 0 else 0
+            print(f"   - {cat.title()}: {count} items ({percentage:.1f}%)")
 
 # Demo
 if __name__ == "__main__":
     rag = DisasterReliefRAG()
     print("🌟 Disaster Relief RAG System Initialized")
+    print("=" * 60)
     
-    print("\n📦 Initial Inventory:")
-    rag.display_inventory()
+    print("\n📦 INITIAL INVENTORY:")
+    rag.display_inventory(show_usage=False)
 
     scenarios = [
         "There are 45 people suffering from injuries and dehydration.",
@@ -333,35 +391,45 @@ if __name__ == "__main__":
         print(f"🚨 SCENARIO {i}: {scenario}")
         print('='*60)
         
+        # Get recommendations
         recs, retrieved, estimated_reqs = rag.recommend_aid(scenario)
 
+        print(f"\n📋 Analysis Results:")
+        print(f"People count detected: {rag._extract_people_count(scenario)}")
+        
         print(f"\n📋 Retrieved Items (Top {len(retrieved)}):")
         for item in retrieved:
             item_name = item['item']
             available = item['quantity']
             estimated = estimated_reqs.get(item_name, 0)
-            print(f"- {item_name}:")
+            status_emoji = '✅' if available >= estimated else '⚠️'
+            print(f"{status_emoji} {item_name}:")
             print(f"    Available: {available} units")
             print(f"    Estimated Need: {estimated} units")
-            print(f"    Status: {'✅ Sufficient' if available >= estimated else '⚠️ Insufficient'}")
+            print(f"    Status: {'Sufficient' if available >= estimated else f'Short by {estimated - available} units'}")
 
         print(f"\n🎯 AI Recommended Allocation:")
         if recs:
             total_recommended = sum(recs.values())
-            print(f"Total items to allocate: {total_recommended}")
+            print(f"Total items to allocate: {total_recommended} units")
             for item_name, qty in recs.items():
-                print(f"- {item_name}: {qty} units")
+                # Find current availability
+                current_stock = next((item['quantity'] for item in rag.inventory if item['item'] == item_name), 0)
+                print(f"  • {item_name}: {qty} units (from {current_stock} available)")
             
             print(f"\n📦 Processing Allocation...")
+            print("-" * 40)
             logs = rag.allocate_aid(recs)
             for log in logs:
                 print(log)
         else:
             print("❌ No valid recommendations generated.")
 
-        rag.display_inventory()
+        print(f"\n📊 UPDATED INVENTORY (After Scenario {i}):")
+        rag.display_inventory(show_usage=True)
         
         # Add separator between scenarios
         if i < len(scenarios):
             print(f"\n{'🔄 Moving to next scenario...'}")
+            input("Press Enter to continue...")  # Optional: pause between scenarios
             print("="*60)
