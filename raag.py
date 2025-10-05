@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 # HF_TOKEN = "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"
 # login(token=HF_TOKEN)
 import requests
-
+hf_token = os.getenv("HF_TOKEN")
 # Replace with the specific model's API URL and your Hugging Face token
 API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
-HEADERS = {"Authorization": "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"} # Replace YOUR_HUGGING_FACE_TOKEN
+HEADERS = {"Authorization": hf_token} # Replace YOUR_HUGGING_FACE_TOKEN
 
 
 @dataclass
