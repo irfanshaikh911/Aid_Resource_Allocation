@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+
 import {
   BarChart,
   Bar,
@@ -16,10 +17,49 @@ import {
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#8b5cf6", "#f97316", "#14b8a6"];
 
 const Analysis = ({ inventory = [], clusters = [] }) => {
-  // -------------------------------
-  // CHART DATA
-  // -------------------------------
+  // ---------------------------------------------------------
+  // AI STATES
+  // ---------------------------------------------------------
+  const [aiData, setAiData] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
+  // ---------------------------------------------------------
+  // CALL GEMINI AI BACKEND
+  // ---------------------------------------------------------
+  const fetchAIInsights = async () => {
+    try {
+      setLoadingAI(true);
+      setAiError(null);
+
+      const res = await fetch("http://localhost:5000/ai/allocate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clusters, inventory }),
+      });
+
+      const data = await res.json();
+
+      if (!data || data.error) {
+        throw new Error(data.error || "Invalid AI response");
+      }
+
+      setAiData(data);
+    } catch (err) {
+      console.error("Gemini AI Error:", err);
+      setAiError("Failed to load AI insights.");
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAIInsights();
+  }, [clusters, inventory]);
+
+  // ---------------------------------------------------------
+  // CHARTS
+  // ---------------------------------------------------------
   const peopleDensityData = clusters.slice(0, 6).map((c) => ({
     cluster: `C${c.id}`,
     people: c.people,
@@ -35,18 +75,16 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
     rescue: Math.ceil(c.people / 20),
   }));
 
-  // Heatmap Risk Grid
   const heatmapGrid = clusters.slice(0, 8).map((c) => ({
     id: c.id,
     people: c.people,
-    risk: c.people > 80 ? "Severe" : c.people > 50 ? "High" : c.people > 25 ? "Medium" : "Low",
+    risk:
+      c.people > 80 ? "Severe" : c.people > 50 ? "High" : c.people > 25 ? "Medium" : "Low",
   }));
 
-  // -------------------------------
-  // ADVANCED ANALYTICS TABLE DATA
-  // -------------------------------
-
-  // 1️⃣ INVENTORY HEALTH TABLE
+  // ---------------------------------------------------------
+  // TABLES
+  // ---------------------------------------------------------
   const inventoryHealth = inventory.map((i) => ({
     name: i.name,
     current: i.current,
@@ -60,7 +98,6 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         : "Healthy",
   }));
 
-  // 2️⃣ CLUSTER PRIORITY TABLE
   const clusterPriority = clusters.map((c) => ({
     id: c.id,
     people: c.people,
@@ -69,12 +106,11 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         ? "🚨 Severe"
         : c.people > 50
         ? "⚠️ High"
-        : c.people > 25
+        : c.people > 30
         ? "🟡 Medium"
         : "🟢 Low",
   }));
 
-  // 3️⃣ AI Allocation Need (based on your logic)
   const allocationTable = clusters.map((c) => ({
     id: c.id,
     people: c.people,
@@ -84,7 +120,6 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
     blankets: Math.ceil(c.people * 1.2),
   }));
 
-  // 4️⃣ Supply Shortage Table
   const supplyShortage = inventory.map((i) => ({
     name: i.name,
     available: i.current,
@@ -97,7 +132,6 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
     }, 0),
   }));
 
-  // 5️⃣ Evacuation Priority Table
   const evacTable = clusters
     .map((c) => ({
       id: c.id,
@@ -114,15 +148,78 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
     .slice(0, 8);
 
   return (
-    <div className="p-6 space-y-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-4">📊 Advanced Disaster Analytics</h1>
+    <div className="p-6 space-y-12">
+      <h1 className="text-3xl font-bold text-gray-900 mb-4">
+        📊 Advanced Disaster Analytics
+      </h1>
 
-      {/* ------------------------- */}
-      {/* CHARTS SECTION */}
-      {/* ------------------------- */}
+      {/* ------------------------------------------------ */}
+      {/* GEMINI AI section */}
+      {/* ------------------------------------------------ */}
+      <div className="bg-white shadow-xl rounded-xl p-6">
+        <h3 className="text-2xl font-semibold mb-4">🤖 Gemini AI Insights</h3>
+
+        {loadingAI && <p className="text-gray-500">Loading AI allocation...</p>}
+        {aiError && <p className="text-red-600">{aiError}</p>}
+
+        {aiData && (
+          <div className="space-y-8">
+            {/* AI Allocation Table */}
+            <div>
+              <h4 className="font-semibold text-lg mb-2">📦 Recommended Allocation</h4>
+
+              <table className="w-full border text-left rounded-lg overflow-hidden">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="p-2">Cluster</th>
+                    <th className="p-2">Food</th>
+                    <th className="p-2">Medical</th>
+                    <th className="p-2">Blankets</th>
+                    <th className="p-2">Boats</th>
+                    <th className="p-2">Priority</th>
+                    <th className="p-2">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiData.allocation?.map((a, idx) => (
+                    <tr key={idx} className="border-b">
+                      <td className="p-2">{a.cluster}</td>
+                      <td className="p-2">{a.send_food_kits}</td>
+                      <td className="p-2">{a.send_medical_kits}</td>
+                      <td className="p-2">{a.send_blankets}</td>
+                      <td className="p-2">{a.send_boats}</td>
+                      <td className="p-2 font-semibold">{a.priority}</td>
+                      <td className="p-2">{a.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Shortage Warning */}
+            {aiData.shortage_warning && (
+              <div className="p-4 bg-red-100 text-red-700 rounded-lg border border-red-300">
+                ⚠️ <strong>Shortage Warning:</strong> {aiData.shortage_warning}
+              </div>
+            )}
+
+            {/* Summary */}
+            {aiData.summary && (
+              <div className="p-4 bg-blue-50 text-blue-900 rounded-lg border border-blue-300">
+                <h4 className="font-semibold mb-1">📝 Summary</h4>
+                <p className="whitespace-pre-line">{aiData.summary}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* OLD CHARTS AND TABLES BELOW (unchanged) */}
+      {/* ------------------------------------------------ */}
+
+      {/* CHARTS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* People Density Bar Chart */}
         <div className="bg-white shadow-lg rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-2">People Density per Cluster</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -135,14 +232,20 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
           </ResponsiveContainer>
         </div>
 
-        {/* Inventory Pie Chart */}
         <div className="bg-white shadow-lg rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-2">Inventory Distribution</h3>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
-              <Pie data={inventoryPie} cx="50%" cy="50%" outerRadius={90} dataKey="value" label>
-                {inventoryPie.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
+              <Pie
+                data={inventoryPie}
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                dataKey="value"
+                label
+              >
+                {inventoryPie.map((_, idx) => (
+                  <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip />
@@ -150,7 +253,6 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
           </ResponsiveContainer>
         </div>
 
-        {/* Rescue Need Trend */}
         <div className="bg-white shadow-lg rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-2">Rescue Boats Needed Over Time</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -163,7 +265,6 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
           </ResponsiveContainer>
         </div>
 
-        {/* Risk Heatmap */}
         <div className="bg-white shadow-lg rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-2">Cluster Risk Heat Levels</h3>
 
@@ -190,14 +291,9 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         </div>
       </div>
 
-      {/* ------------------------- */}
-      {/* ANALYTICS TABLES SECTION  */}
-      {/* ------------------------- */}
-
-      {/* 1️⃣ Inventory Health Table */}
+      {/* TABLES (unchanged) */}
       <div className="bg-white shadow-xl rounded-xl p-6">
         <h3 className="text-xl font-semibold mb-4">🔋 Inventory Health</h3>
-
         <table className="w-full text-left">
           <thead className="border-b">
             <tr>
@@ -230,11 +326,10 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         </table>
       </div>
 
-      {/* 2️⃣ Cluster Priority Table */}
+      {/* Severity Table */}
       <div className="bg-white shadow-xl rounded-xl p-6">
         <h3 className="text-xl font-semibold mb-4">🚨 Cluster Severity Ranking</h3>
-
-        <table className="w-full text-left">
+        <table className="w-full">
           <thead className="border-b">
             <tr>
               <th className="p-2">Cluster</th>
@@ -254,17 +349,16 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         </table>
       </div>
 
-      {/* 3️⃣ Resource Allocation Table */}
+      {/* Base Allocation */}
       <div className="bg-white shadow-xl rounded-xl p-6">
-        <h3 className="text-xl font-semibold mb-4">📦 AI Resource Allocation Suggestion</h3>
-
-        <table className="w-full text-left">
+        <h3 className="text-xl font-semibold mb-4">📦 Base Allocation Estimate</h3>
+        <table className="w-full">
           <thead className="border-b">
             <tr>
               <th className="p-2">Cluster</th>
               <th className="p-2">People</th>
-              <th className="p-2">Food Kits</th>
-              <th className="p-2">Medical Kits</th>
+              <th className="p-2">Food</th>
+              <th className="p-2">Medical</th>
               <th className="p-2">Boats</th>
               <th className="p-2">Blankets</th>
             </tr>
@@ -284,11 +378,10 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         </table>
       </div>
 
-      {/* 4️⃣ Supply Shortage */}
+      {/* Shortage Table */}
       <div className="bg-white shadow-xl rounded-xl p-6">
         <h3 className="text-xl font-semibold mb-4">📉 Supply Shortage Analysis</h3>
-
-        <table className="w-full text-left">
+        <table className="w-full">
           <thead className="border-b">
             <tr>
               <th className="p-2">Resource</th>
@@ -303,7 +396,7 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
                 <td className="p-2">{s.name}</td>
                 <td className="p-2">{s.available}</td>
                 <td className="p-2">{s.needed}</td>
-                <td className="p-2 text-red-600 font-bold">
+                <td className="p-2 text-red-600">
                   {s.needed - s.available > 0 ? s.needed - s.available : "OK"}
                 </td>
               </tr>
@@ -312,11 +405,10 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
         </table>
       </div>
 
-      {/* 5️⃣ Evacuation Priority */}
-      <div className="bg-white shadow-xl rounded-xl p-6">
-        <h3 className="text-xl font-semibold mb-4">🚑 Evacuation Priority Table</h3>
-
-        <table className="w-full text-left">
+      {/* Evacuation Table */}
+      <div className="bg-white shadow-xl rounded-xl p-6 mb-12">
+        <h3 className="text-xl font-semibold mb-4">🚑 Evacuation Priority</h3>
+        <table className="w-full">
           <thead className="border-b">
             <tr>
               <th className="p-2">Cluster</th>
