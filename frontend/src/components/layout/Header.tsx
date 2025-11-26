@@ -4,14 +4,18 @@ import {
   MapPin,
   BarChart3,
   Settings,
-  Bell
+  // Bell
 } from "lucide-react";
 import dropletImage from '../../assets/Logo.png'; 
+import { Bell } from "lucide-react";
+import useNotifications from "../notifications/useNotifications";
+import NotificationPanel from "../notifications/NotificationPanel";
 
 interface HeaderProps {
-  currentView: "dashboard" | "map" | "analysis";
-  onViewChange: (view: "dashboard" | "map" | "analysis") => void;
+  currentView: "dashboard" | "map" | "analysis" | "settings";
+  onViewChange: (view: "dashboard" | "map" | "analysis" | "settings") => void;
 }
+
 
 const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
   return (
@@ -69,14 +73,24 @@ const Header: React.FC<HeaderProps> = ({ currentView, onViewChange }) => {
             <BarChart3 className="w-4 h-4" /> Analysis
           </button>
 
-          <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg">
+          <button
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${
+              currentView === "settings"
+                ? "text-blue-600 bg-blue-50"
+                : "text-gray-600 hover:bg-gray-50"
+            }`}
+            onClick={() => onViewChange("settings")}
+          >
             <Settings className="w-4 h-4" /> Settings
           </button>
+
+
 
           <button className="relative p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
+          
         </nav>
       </div>
     </header>

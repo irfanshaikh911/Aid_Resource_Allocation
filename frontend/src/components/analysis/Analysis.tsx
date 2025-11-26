@@ -32,7 +32,7 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
       setLoadingAI(true);
       setAiError(null);
 
-      const res = await fetch("http://localhost:5000/ai/allocate", {
+      const res = await fetch("http://localhost:5000/ai/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clusters, inventory }),
@@ -51,6 +51,7 @@ const Analysis = ({ inventory = [], clusters = [] }) => {
     } finally {
       setLoadingAI(false);
     }
+    
   };
 
   useEffect(() => {

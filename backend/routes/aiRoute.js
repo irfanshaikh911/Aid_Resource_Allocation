@@ -5,25 +5,37 @@ import dotenv from "dotenv";
 dotenv.config();
 const router = express.Router();
 
-// IMPORTANT: route must be /analyze
 router.post("/analyze", async (req, res) => {
   const { clusters, inventory } = req.body;
 
   const prompt = `
 You are an AI for a flood-relief resource allocation system.
-Analyze clusters + inventory and generate the BEST resource allocation.
+Analyze the clusters and inventory and generate the optimal resource allocation.
 
-Input:
+INPUT:
 CLUSTERS = ${JSON.stringify(clusters, null, 2)}
 INVENTORY = ${JSON.stringify(inventory, null, 2)}
 
-Output STRICT JSON:
+OUTPUT RULES:
+- Return ONLY JSON
+- No extra text
+- Don't exceed inventory limits
+- Provide the following keys:
 {
-  "priority": [],
-  "allocation": [],
-  "shortage": [],
-  "prediction": {},
-  "summary": "..."
+  "allocation": [
+    {
+      "cluster": "C1",
+      "people": 50,
+      "send_food_kits": 40,
+      "send_medical_kits": 12,
+      "send_blankets": 55,
+      "send_boats": 2,
+      "priority": "High",
+      "reason": "High density and limited access"
+    }
+  ],
+  "shortage_warning": "text",
+  "summary": "text"
 }
 `;
 
@@ -40,18 +52,12 @@ Output STRICT JSON:
     );
 
     const data = await response.json();
+    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // Full Gemini response → text result
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    // Some gemini responses include ```json ... ``` → clean them
-    const cleaned = text.replace(/```json|```/g, "").trim();
-
-    return res.json({ ai: JSON.parse(cleaned) });
-
+    return res.json(JSON.parse(aiText));
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return res.status(500).json({ error: "Gemini failed to generate insights" });
+    console.error("Gemini AI Error:", error);
+    return res.status(500).json({ error: "Gemini AI failed" });
   }
 });
 

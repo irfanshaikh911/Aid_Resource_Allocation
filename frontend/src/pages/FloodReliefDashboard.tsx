@@ -4,11 +4,13 @@ import InventoryCard from "../components/inventory/InventoryCard";
 import DroneDetection from "../components/detection/DroneDetection";
 import AllocationRecommendation from "../components/recommendation/AllocationRecommendation";
 import MapAndTimeline from "../components/map/MapAndTimeline";
-import AddInventoryDialog from "../components/inventory/AddInventoryDialog";
+import AddInventoryDialog from "../components/inventory/AddInventoryDialog";  // ✅ FIXED
 import Analysis from "../components/analysis/Analysis"; // ⭐ NEW IMPORT
+import Settings from "./Settings";
 
 import fs from "fs/promises";
 import path from "path";
+
 import {
   Package,
   Heart,
@@ -35,7 +37,7 @@ const FloodReliefDashboard: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
 
   const [currentView, setCurrentView] =
-    useState<"dashboard" | "map" | "analysis">("dashboard");
+    useState<"dashboard" | "map" | "analysis" | "settings">("dashboard");
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
@@ -184,20 +186,32 @@ const FloodReliefDashboard: React.FC = () => {
       );
     }
 
-    // ⭐ ANALYSIS VIEW
     if (currentView === "analysis") {
       return (
         <div className="flex-1 min-h-[calc(100vh-64px)]">
-          <Analysis 
-            inventory={inventory} 
-            clusters={mapMarkers} 
-          />
+          <Analysis inventory={inventory} clusters={mapMarkers} />
+        </div>
+      );
+    }
+
+    // if (currentView === "settings") {
+    //   return (
+    //     <div className="p-6">
+    //       <h1 className="text-2xl font-bold">Settings Page</h1>
+    //       <p className="text-gray-600 mt-2">Your settings will appear here.</p>
+    //     </div>
+    //   );
+    if (currentView === "settings") {
+      return (
+        <div className="flex-1 min-h-[calc(100vh-64px)]">
+          <Settings />
         </div>
       );
     }
 
 
-    // ⭐ DEFAULT DASHBOARD VIEW
+      
+
     return (
       <>
         {/* Inventory Bar */}
@@ -248,7 +262,7 @@ const FloodReliefDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Timeline + Map Section */}
+        {/* Timeline + Map */}
         <div className="p-4">
           <MapAndTimeline
             markers={mapMarkers}
